@@ -1,11 +1,275 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import { getCollection } from 'astro:content';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const recursos = await getCollection('recursos');
 ---
 
-<Layout>
-	<Welcome />
+<Layout title="Lista de Recursos">
+	<main class="min-h-screen" style="background: var(--bg-primary);">
+		<div class="container mx-auto px-4 py-8">
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+				<!-- Columna izquierda: Título y buscador -->
+				<div class="lg:col-span-1">
+					<div class="sticky top-8">
+						<img src="/logo.png" alt="Logo" width="128" height="128" class="w-32 mb-6" />
+						<h1 class="text-4xl font-bold mb-6" style="color: var(--text-primary);">
+							Recursos
+						</h1>
+						<p class="mb-6" style="color: var(--text-secondary);">
+							Lista de links y recursos para recordar cuando hagamos páginas web
+						</p>
+						
+						<!-- Buscador -->
+						<div class="mb-6">
+							<input
+								type="text"
+								id="searchInput"
+								placeholder="Buscar recursos..."
+								class="search-input w-full px-4 py-3 rounded-lg outline-none transition-all duration-300"
+								style="background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary);"
+							/>
+						</div>
+						
+						<!-- Filtros por categoría -->
+						<div class="mb-6">
+							<h3 class="text-lg font-semibold mb-3" style="color: var(--text-primary);">Categorías</h3>
+							<div id="categoryFilters" class="space-y-2">
+								<!-- Se llenarán dinámicamente -->
+							</div>
+						</div>
+						
+						<!-- Contador de resultados -->
+						<div id="resultsCount" class="text-sm" style="color: var(--text-muted);">
+							{recursos.length} recursos encontrados
+						</div>
+					</div>
+				</div>
+				
+				<!-- Columna derecha: Cards de recursos -->
+				<div class="lg:col-span-2 relative">
+					<div id="resourcesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+						{recursos.map((recurso) => (
+							<div class="resource-card rounded-lg overflow-hidden"
+								 data-title={recurso.data.title.toLowerCase()}
+								 data-description={recurso.data.description.toLowerCase()}
+								 data-link={recurso.data.link.toLowerCase()}
+								 data-category={recurso.data.category}
+								 style="background: var(--bg-card); border: 1px solid var(--border-color);">
+								
+								<!-- Preview de la página -->
+								{recurso.data.preview && (
+									<div class="h-48 overflow-hidden" style="background: var(--bg-secondary);">
+										<img 
+											src={recurso.data.preview} 
+											alt={`Preview de ${recurso.data.title}`}
+											class="w-full h-full object-cover"
+											loading="lazy"
+										/>
+									</div>
+								)}
+								
+								<div class="p-6">
+									<!-- Categoría -->
+									<span class="category-badge inline-block px-3 py-1 text-xs font-semibold rounded-full mb-3"
+										  style="color: var(--accent-green); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+										{recurso.data.category}
+									</span>
+									
+									<!-- Título -->
+									<h3 class="text-xl font-bold mb-2 searchable-title" style="color: var(--text-primary);">
+										{recurso.data.title}
+									</h3>
+									
+									<!-- Descripción -->
+									<p class="mb-4 searchable-description" style="color: var(--text-secondary);">
+										{recurso.data.description}
+									</p>
+									
+									<!-- Link -->
+									<a 
+										href={recurso.data.link}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="inline-flex items-center font-medium searchable-link transition-colors duration-200 hover:glow-green-subtle"
+										style="color: var(--accent-green);"
+									>
+										Visitar sitio
+										<svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+										</svg>
+									</a>
+								</div>
+							</div>
+						))}
+					</div>
+					
+					<!-- Mensaje cuando no hay resultados -->
+					<div id="noResults" class="hidden text-center py-12">
+						<div class="text-6xl mb-4" style="color: var(--text-muted);">🔍</div>
+						<h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">No se encontraron recursos</h3>
+						<p style="color: var(--text-secondary);">Intenta con otros términos de búsqueda</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+
+	<script>
+		// Funcionalidad de búsqueda y filtrado
+		document.addEventListener('DOMContentLoaded', function() {
+			const searchInput = document.getElementById('searchInput') as HTMLInputElement;
+			const resourceCards = document.querySelectorAll('.resource-card') as NodeListOf<HTMLElement>;
+			const resultsCount = document.getElementById('resultsCount') as HTMLElement;
+			const noResults = document.getElementById('noResults') as HTMLElement;
+			const resourcesGrid = document.getElementById('resourcesGrid') as HTMLElement;
+			const categoryFilters = document.getElementById('categoryFilters') as HTMLElement;
+			
+			// Obtener todas las categorías únicas
+			const categories = [...new Set(Array.from(resourceCards).map(card => card.dataset.category).filter(Boolean))];
+			
+			// Crear filtros de categoría
+			const allFilter = document.createElement('label');
+			allFilter.className = 'flex items-center cursor-pointer hover:opacity-80 transition-opacity';
+			allFilter.innerHTML = `
+				<input type="checkbox" class="category-filter mr-3 accent-green-500" value="all" checked>
+				<span style="color: var(--text-secondary);">Todas las categorías</span>
+			`;
+			categoryFilters.appendChild(allFilter);
+			
+			categories.forEach(category => {
+				const label = document.createElement('label');
+				label.className = 'flex items-center cursor-pointer hover:opacity-80 transition-opacity';
+				label.innerHTML = `
+					<input type="checkbox" class="category-filter mr-3 accent-green-500" value="${category}" checked>
+					<span style="color: var(--text-secondary);">${category}</span>
+				`;
+				categoryFilters.appendChild(label);
+			});
+			
+			const categoryCheckboxes = document.querySelectorAll('.category-filter') as NodeListOf<HTMLInputElement>;
+			const allCheckbox = document.querySelector('.category-filter[value="all"]') as HTMLInputElement;
+			
+			// Función para resaltar texto
+			function highlightText(text: string, searchTerm: string) {
+				if (!searchTerm) return text;
+				const regex = new RegExp(`(${searchTerm})`, 'gi');
+				return text.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+			}
+			
+			// Función para filtrar recursos
+			function filterResources() {
+				const searchTerm = searchInput.value.toLowerCase().trim();
+				const selectedCategories = Array.from(categoryCheckboxes)
+					.filter(cb => cb.checked && cb.value !== 'all')
+					.map(cb => cb.value);
+				
+				const showAllCategories = allCheckbox.checked || selectedCategories.length === 0;
+				let visibleCount = 0;
+				
+				resourceCards.forEach(card => {
+					const title = card.dataset.title || '';
+					const description = card.dataset.description || '';
+					const link = card.dataset.link || '';
+					const category = card.dataset.category || '';
+					
+					// Verificar si coincide con la búsqueda
+					const matchesSearch = !searchTerm || 
+						title.includes(searchTerm) || 
+						description.includes(searchTerm) || 
+						link.includes(searchTerm);
+					
+					// Verificar si coincide con la categoría
+					const matchesCategory = showAllCategories || selectedCategories.includes(category);
+					
+					if (matchesSearch && matchesCategory) {
+						card.style.display = 'block';
+						visibleCount++;
+						
+						// Resaltar texto en elementos visibles
+						if (searchTerm) {
+							const titleElement = card.querySelector('.searchable-title') as HTMLElement;
+							const descriptionElement = card.querySelector('.searchable-description') as HTMLElement;
+							const linkElement = card.querySelector('.searchable-link') as HTMLElement;
+							
+							if (titleElement && titleElement.textContent) {
+								titleElement.innerHTML = highlightText(titleElement.textContent, searchTerm);
+							}
+							if (descriptionElement && descriptionElement.textContent) {
+								descriptionElement.innerHTML = highlightText(descriptionElement.textContent, searchTerm);
+							}
+							if (linkElement && linkElement.textContent) {
+								const linkText = linkElement.textContent;
+								if (linkText !== 'Visitar sitio') {
+									linkElement.innerHTML = highlightText(linkText, searchTerm) + 
+										'<svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>';
+								}
+							}
+						} else {
+							// Restaurar texto original si no hay búsqueda
+							const titleElement = card.querySelector('.searchable-title') as HTMLElement;
+							const descriptionElement = card.querySelector('.searchable-description') as HTMLElement;
+							
+							if (titleElement && titleElement.textContent) {
+								titleElement.innerHTML = titleElement.textContent;
+							}
+							if (descriptionElement && descriptionElement.textContent) {
+								descriptionElement.innerHTML = descriptionElement.textContent;
+							}
+						}
+					} else {
+						card.style.display = 'none';
+					}
+				});
+				
+				// Actualizar contador y mostrar/ocultar mensaje de "no resultados"
+				resultsCount.textContent = `${visibleCount} recursos encontrados`;
+				
+				if (visibleCount === 0) {
+					resourcesGrid.style.display = 'none';
+					noResults.style.display = 'block';
+				} else {
+					resourcesGrid.style.display = 'grid';
+					noResults.style.display = 'none';
+				}
+			}
+			
+			// Event listeners
+			if (searchInput) {
+				searchInput.addEventListener('input', filterResources);
+			}
+			
+			// Manejar filtros de categoría
+			if (allCheckbox) {
+				allCheckbox.addEventListener('change', function() {
+					if (this.checked) {
+						categoryCheckboxes.forEach(cb => {
+							if (cb.value !== 'all') cb.checked = true;
+						});
+					}
+					filterResources();
+				});
+			}
+			
+			categoryCheckboxes.forEach(checkbox => {
+				if (checkbox.value !== 'all') {
+					checkbox.addEventListener('change', function() {
+						// Si se desmarca alguna categoría, desmarcar "Todas"
+						if (!this.checked) {
+							allCheckbox.checked = false;
+						}
+						
+						// Si todas las categorías están marcadas, marcar "Todas"
+						const individualCheckboxes = Array.from(categoryCheckboxes).filter(cb => cb.value !== 'all');
+						const allIndividualChecked = individualCheckboxes.every(cb => cb.checked);
+						if (allIndividualChecked) {
+							allCheckbox.checked = true;
+						}
+						
+						filterResources();
+					});
+				}
+			});
+		});
+	</script>
 </Layout>
